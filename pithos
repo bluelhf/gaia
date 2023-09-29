@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+if [ "$1" = "upload" ]; then
+  secret=$(gaia encrypt -)
+  filesize=$(du -b e.out | cut -f1)
+  response=$(curl -s https://pithos.lhf.blue/upload -H "X-File-Size: $filesize")
+  signed_url=$(echo "$response" | jq -r '.url')
+  uuid=$(echo "$response" | jq -r '.uuid')
+
+  curl --progress-bar "https://pithos.lhf.blue$signed_url" -T e.out | cat
+  rm e.out
+
+  printf "$0 download %s %s\n" "$secret" "$uuid"
+elif [ "$1" = "download" ]; then
+  response=$(curl -s "https://pithos.lhf.blue/download/$3")
+  signed_url=$(echo "$response" | jq -r '.url')
+  curl -s "https://pithos.lhf.blue$signed_url" -o- | gaia decrypt "$2" - -o-
+fi
