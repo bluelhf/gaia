@@ -4,14 +4,7 @@
 
 Gaia is a command-line application for encrypting and decrypting files.
 
-```shell
-$ gaia encrypt /home/bob/ILOVEYOU.txt -o SECRET_LETTER.enc
-CLXuz...7OgAw==
-$ scp /home/bob/SECRET_LETTER.enc bob@shared:/home/alice/public/
-```
-```shell
-$ gaia decrypt CLXuz...7OgAw== /home/alice/public/SECRET_LETTER.enc -o-
-```
+<img src="assets/shell.png" width="600">
 
 ## Compiling
 
