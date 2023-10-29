@@ -29,7 +29,12 @@ impl Display for ConversionError {
 }
 
 impl Error for ConversionError {
-
+    fn cause(&self) -> Option<&dyn Error> {
+        match self {
+            Self::Base64EncodingError(cause) => Some(cause),
+            Self::KeyEncodingError(cause) => Some(cause)
+        }
+    }
 }
 
 pub fn to_secret(kh: &Handle) -> Result<String, ConversionError> {

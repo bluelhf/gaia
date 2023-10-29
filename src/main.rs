@@ -1,6 +1,4 @@
 mod error;
-mod crypt;
-mod keystore;
 
 use std::borrow::Cow;
 use std::fs::{File, OpenOptions};
@@ -8,9 +6,8 @@ use std::io;
 use std::io::{Read, stderr, stdin, stdout, Write};
 use clap::{Parser, Subcommand};
 use main_error::MainError;
-use crate::crypt::{decrypt, encrypt};
-use crate::error::GaiaError;
-use crate::keystore::{from_secret, to_secret};
+use gaia::{decrypt, encrypt, keystore::{from_secret, to_secret}};
+use crate::error::CliError;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Encrypt and decrypt files.", long_about = "Gaia is a command-line application for encrypting and decrypting files.")]
@@ -74,25 +71,25 @@ fn main() -> Result<(), MainError> {
     }
 
     match &args.command {
-        Commands::Encrypt { file_path: input, output, secret_path: secret } => {
-            let input_file = open_input(input).map_err(|e| GaiaError::OpeningInput(input_name(input), e))?;
-            let output_file = open_output(output).map_err(|e| GaiaError::OpeningOutput(output_name(output), e))?;
-            let mut secret_file = open_output(secret).map_err(|e| GaiaError::OpeningSecret(output_name(secret), e))?;
+        Commands::Encrypt { file_path: input, output, secret_path } => {
+            let input_file = open_input(input).map_err(|e| CliError::OpeningInput(input_name(input), e))?;
+            let output_file = open_output(output).map_err(|e| CliError::OpeningOutput(output_name(output), e))?;
+            let mut secret_file = open_output(secret_path).map_err(|e| CliError::WritingSecret(output_name(secret_path), e))?;
 
             let handle = encrypt(input_file, output_file)?;
 
-            let secret = to_secret(&handle).map_err(|e| GaiaError::InvalidSecret(e))?;
-            secret_file.write_all(secret.as_bytes()).map_err(|e| GaiaError::WritingOutput(e))?;
+            let secret = to_secret(&handle).map_err(|e| CliError::InvalidSecret(e))?;
+            secret_file.write_all(secret.as_bytes()).map_err(|e| CliError::WritingSecret(output_name(secret_path), e))?;
             secret_file.write(&[10])?;
 
             Ok(())
         }
         Commands::Decrypt { secret_key, file_path: input, output } => {
-            let input_file = open_input(input).map_err(|e| GaiaError::OpeningInput(input_name(input), e))?;
-            let output_file = open_output(output).map_err(|e| GaiaError::OpeningOutput(output_name(output), e))?;
+            let input_file = open_input(input).map_err(|e| CliError::OpeningInput(input_name(input), e))?;
+            let output_file = open_output(output).map_err(|e| CliError::OpeningOutput(output_name(output), e))?;
 
             Ok(decrypt(input_file, &from_secret(secret_key.as_ref())
-                .map_err(|e| GaiaError::InvalidSecret(e))?, output_file)?)
+                .map_err(|e| CliError::InvalidSecret(e))?, output_file)?)
         }
     }
 }

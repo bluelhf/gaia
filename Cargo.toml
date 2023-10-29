@@ -1,14 +1,14 @@
 [package]
-name = "gaia"
+name = "gaia-cli"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+
 [dependencies]
-base64 = "0.21.4"
+gaia = { path = "gaia", features = ["base64"] }
 clap = { version = "4.4.5", features = ["derive"] }
 main_error = "0.1.2"
 prost = "0.12.1"
-tink-core = { version = "0.2.5", features = ["insecure"] }
-tink-streaming-aead = "0.2.5"
