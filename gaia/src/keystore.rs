@@ -1,13 +1,15 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use aead::Key;
+use aead::generic_array::GenericArray;
+use aead::generic_array::sequence::Concat;
+use aes_gcm_siv::Aes256GcmSiv;
 use base64::{DecodeError, Engine};
 use base64::prelude::BASE64_URL_SAFE;
-use tink_core::keyset::{BinaryReader, BinaryWriter, Handle, insecure};
-use tink_core::TinkError;
 
 pub enum ConversionError {
     Base64EncodingError(DecodeError),
-    KeyEncodingError(TinkError)
+    KeyEncodingError(aead::Error)
 }
 
 impl Debug for ConversionError {
@@ -37,14 +39,14 @@ impl Error for ConversionError {
     }
 }
 
-pub fn to_secret(kh: &Handle) -> Result<String, ConversionError> {
-    let mut data: Vec<u8> = Vec::new();
-    insecure::write(kh, &mut BinaryWriter::new(&mut data)).map_err(|e| ConversionError::KeyEncodingError(e))?;
-    Ok(BASE64_URL_SAFE.encode(data))
+pub fn to_secret(kh: &(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce)) -> Result<String, ConversionError> {
+    dbg!(kh.0, kh.1);
+    Ok(BASE64_URL_SAFE.encode(kh.0.concat(kh.1)))
 }
 
 
-pub fn from_secret(secret: &str) -> Result<Handle, ConversionError> {
+pub fn from_secret(secret: &str) -> Result<(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce), ConversionError> {
     let data = BASE64_URL_SAFE.decode(secret).map_err(|e| ConversionError::Base64EncodingError(e))?;
-    insecure::read(&mut BinaryReader::new(&data[..])).map_err(|e| ConversionError::KeyEncodingError(e))
+    let (key, nonce) = data.split_at(32);
+    Ok((*GenericArray::from_slice(key), *GenericArray::from_slice(nonce)))
 }

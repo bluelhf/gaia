@@ -9,6 +9,6 @@ edition = "2021"
 base64 = ["dep:base64"]
 
 [dependencies]
-tink-core = { version = "0.2.5", features = ["insecure"] }
-tink-streaming-aead = "0.2.5"
+aead = { version = "0.5.2", features = ["stream", "std"] }
+aes-gcm-siv = { version = "0.11.1", features = ["alloc"] }
 base64 = { version = "0.21.4", optional = true }
