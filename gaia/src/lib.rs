@@ -39,7 +39,6 @@ pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<(Key<Aes256Gc
 }
 
 pub fn decrypt<'a>(input: impl Read, kh: &(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce), mut output: impl Write) -> Result<(), GaiaError> {
-    dbg!(kh.0, kh.1);
     let cipher = Aes256GcmSiv::new(&kh.0);
     let stream_nonce = vec![0u8; kh.1.len() - 4].splice(0..kh.1.len() - 4, kh.1).collect::<Vec<_>>();
 

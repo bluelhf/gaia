@@ -40,7 +40,6 @@ impl Error for ConversionError {
 }
 
 pub fn to_secret(kh: &(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce)) -> Result<String, ConversionError> {
-    dbg!(kh.0, kh.1);
     Ok(BASE64_URL_SAFE.encode(kh.0.concat(kh.1)))
 }
 
