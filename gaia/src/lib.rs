@@ -2,8 +2,13 @@
 #![feature(buf_read_has_data_left)]
 
 use std::io::{BufRead, BufReader, Read, Write};
-use aead::{AeadCore, OsRng};
-use aead::stream::{NewStream, StreamLE31, StreamPrimitive};
+use std::ops::Sub;
+use aead::{AeadCore, OsRng, stream};
+use aead::consts::U4;
+use aead::generic_array::{ArrayLength, GenericArray};
+use aead::generic_array::typenum::Unsigned;
+use aead::rand_core::RngCore;
+use aead::stream::{Decryptor, Encryptor, StreamLE31, StreamPrimitive};
 use aes_gcm_siv::{Aes256GcmSiv, Key, KeyInit};
 
 use crate::error::GaiaError;
@@ -56,9 +61,12 @@ where
     let mut decryptor = Decryptor::<Cipher, Stream>::new(&kh.0, &stream_nonce.into());
     let mut reader = BufReader::new(input);
 
+    let mut buffer = Vec::new();
+
     loop {
-        let buffer = reader.fill_buf().map_err(|e| GaiaError::ReadingInput(e))?.to_vec();
-        reader.consume(buffer.len());
+        buffer.clear();
+        reader.by_ref().take(BUF_SIZE as u64 + StreamTagLength::to_u64()).read_to_end(&mut buffer).map_err(|e| GaiaError::ReadingInput(e))?;
+
         if let Ok(more_data) = reader.has_data_left() && more_data {
             output.write_all(&*decryptor.decrypt_next(&buffer[..]).map_err(|e| GaiaError::Decrypting(e))?).map_err(|e| GaiaError::WritingOutput(e))?;
         } else {
