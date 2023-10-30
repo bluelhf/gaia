@@ -9,24 +9,32 @@ use aes_gcm_siv::{Aes256GcmSiv, Key, KeyInit};
 use crate::error::GaiaError;
 pub mod error;
 
+type Cipher = Aes256GcmSiv;
+type Stream = StreamLE31<Cipher>;
+type StreamNonceOverhead = <Stream as StreamPrimitive<Cipher>>::NonceOverhead;
+type StreamNonceLength = <<Cipher as AeadCore>::NonceSize as Sub<StreamNonceOverhead>>::Output;
+type StreamTagLength = <Cipher as AeadCore>::TagSize;
+
 #[cfg(feature = "base64")]
 pub mod keystore;
 
-pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce), GaiaError> {
-    let key = Aes256GcmSiv::generate_key(&mut OsRng);
-    let nonce = Aes256GcmSiv::generate_nonce(&mut OsRng);
-    let cipher = Aes256GcmSiv::new(&key);
+const BUF_SIZE: usize = 16384;
 
-    let stream_nonce = vec![0u8; nonce.len() - 4].splice(0..nonce.len() - 4, nonce).collect::<Vec<_>>();
+pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<(Key<Cipher>, stream::Nonce<Cipher, Stream>), GaiaError> {
+    let key = Cipher::generate_key(&mut OsRng);
 
-    let stream: StreamLE31<Aes256GcmSiv> = StreamLE31::from_aead(cipher, aead::stream::Nonce::<Aes256GcmSiv, StreamLE31<Aes256GcmSiv>>::from_slice(&stream_nonce[..]));
+    let mut stream_nonce = GenericArray::<u8, StreamNonceLength>::default();
+    (&mut OsRng).fill_bytes(&mut stream_nonce);
 
-    let mut encryptor = stream.encryptor();
+    let mut encryptor = Encryptor::<Cipher, Stream>::new(&key, &stream_nonce.into());
+
     let mut reader = BufReader::new(input);
+    let mut buffer = Vec::new();
 
     loop {
-        let buffer = reader.fill_buf().map_err(|e| GaiaError::ReadingInput(e))?.to_vec();
-        reader.consume(buffer.len());
+        buffer.clear();
+        reader.by_ref().take(BUF_SIZE as u64).read_to_end(&mut buffer).map_err(|e| GaiaError::ReadingInput(e))?;
+
         if let Ok(more_data) = reader.has_data_left() && more_data {
             output.write_all(&*encryptor.encrypt_next(&buffer[..]).map_err(|e| GaiaError::Encrypting(e))?).map_err(|e| GaiaError::WritingOutput(e))?;
         } else {
@@ -35,15 +43,17 @@ pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<(Key<Aes256Gc
         }
     }
 
-    Ok((key, nonce))
+    Ok((key, stream_nonce))
 }
 
-pub fn decrypt<'a>(input: impl Read, kh: &(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce), mut output: impl Write) -> Result<(), GaiaError> {
-    let cipher = Aes256GcmSiv::new(&kh.0);
-    let stream_nonce = vec![0u8; kh.1.len() - 4].splice(0..kh.1.len() - 4, kh.1).collect::<Vec<_>>();
+pub fn decrypt<'a>(input: impl Read, kh: &(Key<Cipher>, stream::Nonce<Cipher, Stream>), mut output: impl Write) -> Result<(), GaiaError>
+where
+    <Cipher as AeadCore>::NonceSize: Sub<U4>,
+    <<Cipher as AeadCore>::NonceSize as Sub<U4>>::Output: ArrayLength<u8>
+{
+    let stream_nonce = kh.1;
 
-    let stream: StreamLE31<Aes256GcmSiv> = StreamLE31::from_aead(cipher, aead::stream::Nonce::<Aes256GcmSiv, StreamLE31<Aes256GcmSiv>>::from_slice(&stream_nonce[..]));
-    let mut decryptor = stream.decryptor();
+    let mut decryptor = Decryptor::<Cipher, Stream>::new(&kh.0, &stream_nonce.into());
     let mut reader = BufReader::new(input);
 
     loop {

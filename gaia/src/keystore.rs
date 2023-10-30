@@ -1,11 +1,12 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use aead::Key;
+use aead::{Key, KeySizeUser, stream};
 use aead::generic_array::GenericArray;
 use aead::generic_array::sequence::Concat;
-use aes_gcm_siv::Aes256GcmSiv;
+use aead::generic_array::typenum::Unsigned;
 use base64::{DecodeError, Engine};
 use base64::prelude::BASE64_URL_SAFE;
+use crate::{Cipher, Stream};
 
 pub enum ConversionError {
     Base64EncodingError(DecodeError),
@@ -39,13 +40,13 @@ impl Error for ConversionError {
     }
 }
 
-pub fn to_secret(kh: &(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce)) -> Result<String, ConversionError> {
+pub fn to_secret(kh: &(Key<Cipher>, stream::Nonce<Cipher, Stream>)) -> Result<String, ConversionError> {
     Ok(BASE64_URL_SAFE.encode(kh.0.concat(kh.1)))
 }
 
 
-pub fn from_secret(secret: &str) -> Result<(Key<Aes256GcmSiv>, aes_gcm_siv::Nonce), ConversionError> {
+pub fn from_secret(secret: &str) -> Result<(Key<Cipher>, stream::Nonce<Cipher, Stream>), ConversionError> {
     let data = BASE64_URL_SAFE.decode(secret).map_err(|e| ConversionError::Base64EncodingError(e))?;
-    let (key, nonce) = data.split_at(32);
+    let (key, nonce) = data.split_at(<Cipher as KeySizeUser>::KeySize::to_usize());
     Ok((*GenericArray::from_slice(key), *GenericArray::from_slice(nonce)))
 }
