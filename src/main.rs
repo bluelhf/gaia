@@ -66,7 +66,7 @@ fn main() -> Result<(), MainError> {
             "-" => Box::new(stdout()),
             "^" => Box::new(stderr()),
             _ => Box::new(OpenOptions::new()
-                .create(true).write(true).open(path)?)
+                .create(true).write(true).truncate(true).open(path)?)
         })
     }
 
