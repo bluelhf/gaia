@@ -51,7 +51,7 @@ pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<(Key<Cipher>,
     Ok((key, stream_nonce))
 }
 
-pub fn decrypt<'a>(input: impl Read, kh: &(Key<Cipher>, stream::Nonce<Cipher, Stream>), mut output: impl Write) -> Result<(), GaiaError>
+pub fn decrypt(input: impl Read, kh: &(Key<Cipher>, stream::Nonce<Cipher, Stream>), mut output: impl Write) -> Result<(), GaiaError>
 where
     <Cipher as AeadCore>::NonceSize: Sub<U4>,
     <<Cipher as AeadCore>::NonceSize as Sub<U4>>::Output: ArrayLength<u8>
