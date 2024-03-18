@@ -9,12 +9,12 @@ use aead::generic_array::{ArrayLength, GenericArray};
 use aead::generic_array::typenum::Unsigned;
 use aead::rand_core::RngCore;
 use aead::stream::{Decryptor, Encryptor, StreamLE31, StreamPrimitive};
-use aes_gcm_siv::{Aes256GcmSiv, Key, KeyInit};
+use crypto_common::{Key, KeyInit};
 
 use crate::error::GaiaError;
 pub mod error;
 
-type Cipher = Aes256GcmSiv;
+type Cipher = aes_gcm_siv::Aes256GcmSiv;
 type Stream = StreamLE31<Cipher>;
 type StreamNonceOverhead = <Stream as StreamPrimitive<Cipher>>::NonceOverhead;
 type StreamNonceLength = <<Cipher as AeadCore>::NonceSize as Sub<StreamNonceOverhead>>::Output;
@@ -36,17 +36,19 @@ pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<(Key<Cipher>,
 
     let mut encryptor = Encryptor::<Cipher, Stream>::new(&key, &stream_nonce.into());
 
-    let mut reader = BufReader::new(input);
+    let reader = &mut BufReader::new(input);
     let mut buffer = Vec::new();
 
     loop {
         buffer.clear();
-        reader.by_ref().take(BUF_SIZE as u64).read_to_end(&mut buffer).map_err(|e| GaiaError::ReadingInput(e))?;
+        reader.take(BUF_SIZE as u64).read_to_end(&mut buffer).map_err(|e| GaiaError::ReadingInput(e))?;
 
         if let Ok(more_data) = reader.has_data_left() && more_data {
-            output.write_all(&*encryptor.encrypt_next(&buffer[..]).map_err(|e| GaiaError::Encrypting(e))?).map_err(|e| GaiaError::WritingOutput(e))?;
+            encryptor.encrypt_next_in_place(&[], &mut buffer).map_err(|e| GaiaError::Encrypting(e))?;
+            output.write_all(&buffer).map_err(|e| GaiaError::WritingOutput(e))?;
         } else {
-            output.write_all(&*encryptor.encrypt_last(&buffer[..]).map_err(|e| GaiaError::Encrypting(e))?).map_err(|e| GaiaError::WritingOutput(e))?;
+            encryptor.encrypt_last_in_place(&[], &mut buffer).map_err(|e| GaiaError::Encrypting(e))?;
+            output.write_all(&buffer).map_err(|e| GaiaError::WritingOutput(e))?;
             break;
         }
     }
@@ -62,18 +64,20 @@ where
     let stream_nonce = kh.1;
 
     let mut decryptor = Decryptor::<Cipher, Stream>::new(&kh.0, &stream_nonce.into());
-    let mut reader = BufReader::new(input);
+    let reader = &mut BufReader::new(input);
 
     let mut buffer = Vec::new();
 
     loop {
         buffer.clear();
-        reader.by_ref().take(BUF_SIZE as u64 + StreamTagLength::to_u64()).read_to_end(&mut buffer).map_err(|e| GaiaError::ReadingInput(e))?;
+        reader.take(BUF_SIZE as u64 + StreamTagLength::to_u64()).read_to_end(&mut buffer).map_err(|e| GaiaError::ReadingInput(e))?;
 
         if let Ok(more_data) = reader.has_data_left() && more_data {
-            output.write_all(&*decryptor.decrypt_next(&buffer[..]).map_err(|e| GaiaError::Decrypting(e))?).map_err(|e| GaiaError::WritingOutput(e))?;
+            decryptor.decrypt_next_in_place(&[], &mut buffer).map_err(|e| GaiaError::Decrypting(e))?;
+            output.write_all(&buffer[0..BUF_SIZE.min(buffer.len())]).map_err(|e| GaiaError::WritingOutput(e))?;
         } else {
-            output.write_all(&*decryptor.decrypt_last(&buffer[..]).map_err(|e| GaiaError::Decrypting(e))?).map_err(|e| GaiaError::WritingOutput(e))?;
+            decryptor.decrypt_last_in_place(&[], &mut buffer).map_err(|e| GaiaError::Decrypting(e))?;
+            output.write_all(&buffer[0..BUF_SIZE.min(buffer.len())]).map_err(|e| GaiaError::WritingOutput(e))?;
             break;
         }
     }
@@ -90,17 +94,19 @@ pub async fn encrypt_async(input: impl tokio::io::AsyncRead + Unpin, mut output:
 
     let mut encryptor = Encryptor::<Cipher, Stream>::new(&key, &stream_nonce.into());
 
-    let mut reader = tokio::io::BufReader::new(input);
+    let reader = &mut tokio::io::BufReader::new(input);
     let mut buffer = Vec::new();
 
     loop {
         buffer.clear();
-        reader.get_mut().take(BUF_SIZE as u64).read_to_end(&mut buffer).await.map_err(|e| GaiaError::ReadingInput(e))?;
+        reader.take(BUF_SIZE as u64).read_to_end(&mut buffer).await.map_err(|e| GaiaError::ReadingInput(e))?;
 
         if let Ok(more_data) = reader.fill_buf().await && more_data != [] {
-            output.write_all(&*encryptor.encrypt_next(&buffer[..]).map_err(|e| GaiaError::Encrypting(e))?).await.map_err(|e| GaiaError::WritingOutput(e))?;
+            encryptor.encrypt_next_in_place(&[], &mut buffer).map_err(|e| GaiaError::Encrypting(e))?;
+            output.write_all(&buffer).await.map_err(|e| GaiaError::WritingOutput(e))?;
         } else {
-            output.write_all(&*encryptor.encrypt_last(&buffer[..]).map_err(|e| GaiaError::Encrypting(e))?).await.map_err(|e| GaiaError::WritingOutput(e))?;
+            encryptor.encrypt_last_in_place(&[], &mut buffer).map_err(|e| GaiaError::Encrypting(e))?;
+            output.write_all(&buffer).await.map_err(|e| GaiaError::WritingOutput(e))?;
             break;
         }
     }
@@ -117,18 +123,20 @@ where
     let stream_nonce = kh.1;
 
     let mut decryptor = Decryptor::<Cipher, Stream>::new(&kh.0, &stream_nonce.into());
-    let mut reader = tokio::io::BufReader::new(input);
+    let reader = &mut tokio::io::BufReader::new(input);
 
     let mut buffer = Vec::new();
 
     loop {
         buffer.clear();
-        reader.get_mut().take(BUF_SIZE as u64 + StreamTagLength::to_u64()).read_to_end(&mut buffer).await.map_err(|e| GaiaError::ReadingInput(e))?;
+        reader.take(BUF_SIZE as u64 + StreamTagLength::to_u64()).read_to_end(&mut buffer).await.map_err(|e| GaiaError::ReadingInput(e))?;
 
         if let Ok(more_data) = reader.fill_buf().await && more_data != [] {
-            output.write_all(&*decryptor.decrypt_next(&buffer[..]).map_err(|e| GaiaError::Decrypting(e))?).await.map_err(|e| GaiaError::WritingOutput(e))?;
+            decryptor.decrypt_next_in_place(&[], &mut buffer).map_err(|e| GaiaError::Decrypting(e))?;
+            output.write_all(&buffer).await.map_err(|e| GaiaError::WritingOutput(e))?;
         } else {
-            output.write_all(&*decryptor.decrypt_last(&buffer[..]).map_err(|e| GaiaError::Decrypting(e))?).await.map_err(|e| GaiaError::WritingOutput(e))?;
+            decryptor.decrypt_last_in_place(&[], &mut buffer).map_err(|e| GaiaError::Decrypting(e))?;
+            output.write_all(&buffer).await.map_err(|e| GaiaError::WritingOutput(e))?;
             break;
         }
     }
