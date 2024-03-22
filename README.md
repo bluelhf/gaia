@@ -2,7 +2,7 @@
 
 # Gaia
 
-Gaia is a command-line application for encrypting and decrypting files.
+Gaia is a command-line application and library for encrypting and decrypting files.
 
 <img src="assets/shell.png" width="400" align="left">
 <br clear="both"/>
