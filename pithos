@@ -1,4 +1,12 @@
 #!/usr/bin/env sh
+
+pithos="./"$(realpath --relative-to="$PWD" "$0")
+
+if ! command -v gaia >/dev/null 2>&1; then
+  echo "gaia not found. is it in your PATH?"
+  exit 1
+fi
+
 if [ "$1" = "upload" ]; then
   secret=$(gaia encrypt -)
   filesize=$(du -b e.out | cut -f1)
@@ -9,9 +17,30 @@ if [ "$1" = "upload" ]; then
   curl --progress-bar "https://pithos.lhf.blue$signed_url" -T e.out | cat
   rm e.out
 
-  printf "$0 download %s %s\n" "$secret" "$uuid"
+  printf "$pithos download %s %s\n" "$secret" "$uuid"
 elif [ "$1" = "download" ]; then
   response=$(curl -s "https://pithos.lhf.blue/download/$3")
   signed_url=$(echo "$response" | jq -r '.url')
   curl -s "https://pithos.lhf.blue$signed_url" -o- | gaia decrypt "$2" - -o-
+else
+  echo "Pithos-Gaia CLI"
+  echo "  This command-line interface may be used for encrypting a file and uploading it to Pithos,"
+  echo "  or for downloading and decrypting a file from Pithos."
+  echo ""
+  echo "Usage:"
+  echo "  $pithos upload - Encrypts and uploads the standard input, returning the download command for the file"
+  echo "  $pithos download <secret> <uuid> - Downloads and decrypts the given file, writing the output to standard output"
+  echo ""
+  echo "Example:"
+  echo "  Bob's computer:"
+  echo "    $ $pithos upload < SECRET_LETTER.txt"
+  echo "    ######################################################################## 100.0%"
+  echo "    $pithos download ijEIoTcA7VM2VmDSJm16DKxoQrxUSRZloQrd3Gzdh6bmNznJZHeCcQ== fa412156-a953-4c75-85e4-36bc3b4e1e16"
+  echo ""
+  echo "  Alice's computer:"
+  echo "    $ $pithos download ijEIoTcA7VM2VmDSJm16DKxoQrxUSRZloQrd3Gzdh6bmNznJZHeCcQ== fa412156-a953-4c75-85e4-36bc3b4e1e16"
+  echo "    Dear Alice, I'm sorry for the delay in responding to your letter."
+  echo "    8< --- snip --- >8"
+  echo "    Sincerely, Bob"
+  exit 1
 fi
