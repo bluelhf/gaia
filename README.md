@@ -26,6 +26,12 @@ Gaia has a tiny library, located in the `gaia` directory. At its core are two fu
 1. `encrypt(impl Read, impl Write) -> Result<(Key, Nonce), ...>`
 2. `decrypt(impl Read, (Key, Nonce), impl Write) -> Result<(), ...>`
 
+and their asynchronous counterparts (with the `tokio` feature)
+1. `encrypt_async(input: impl AsyncRead + Unpin,               impl AsyncWrite + Unpin) -> Result<(Key, Nonce), ...>`
+2. `decrypt_async(input: impl AsyncRead + Unpin, (Key, Nonce), impl AsyncWrite + Unpin) -> Result<()          , ...>`
+
+Finally, for all four functions there are `struct` counterparts implementing `Read` and `tokio::io::AsyncRead` respectively.
+
 These use the STREAM-LE31 construction with AES-256-GCM-SIV, as implemented in [aead::stream](https://docs.rs/aead/latest/aead/stream/index.html).
 
 `(Key, Nonce)` pairs can be converted to and from URL-safe BASE64 strings when the `base64` library is enabled by using another pair of methods:
