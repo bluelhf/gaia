@@ -12,7 +12,8 @@ path = "src/main.rs"
 [workspace]
 
 [dependencies]
-gaia = { path = "gaia", features = ["base64"] }
+gaia = { path = "gaia", features = ["base64", "tokio"] }
+tokio = { version = "1.36.0", features = ["rt-multi-thread", "macros", "fs", "io-std"] }
 clap = { version = "4.4.5", features = ["derive"] }
 main_error = "0.1.2"
 prost = "0.12.1"
