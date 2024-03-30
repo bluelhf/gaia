@@ -68,8 +68,8 @@ impl<R> AsyncRead for AsyncChunkingReader<R> where R: AsyncRead + Unpin {
 
         let mut pinned_reader = std::pin::pin!(this.reader.as_mut());
 
-        let needed = output.remaining() + 1 - this.cursor;
-        this.buffer.resize(needed, 0);
+        let target_size = output.remaining() + 1;
+        this.buffer.resize(target_size, 0);
 
         let mut read_buf = ReadBuf::new(&mut this.buffer);
         read_buf.advance(this.cursor);
