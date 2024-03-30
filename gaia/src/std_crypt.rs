@@ -1,13 +1,9 @@
 use std::io::{self, Read, Write, BufRead, BufReader, ErrorKind};
 use std::ops::Sub;
-use aead::{AeadCore, OsRng, stream, consts::U4, generic_array::{ArrayLength, GenericArray}, rand_core::RngCore};
-use crypto_common::{KeyInit, typenum::Unsigned};
+use aead::{AeadCore, OsRng, consts::U4, generic_array::ArrayLength};
+use crypto_common::typenum::Unsigned;
 
-use crate::{
-    error::GaiaError, BUF_SIZE,
-    Stream, Key, Cipher, Encryptor, Decryptor,
-    StreamTagLength, StreamNonceLength
-};
+use crate::{error::GaiaError, BUF_SIZE, Stream, Cipher, Encryptor, Decryptor, StreamTagLength, generate_handle, Handle};
 
 macro_rules! sync_crypt_reader_impl {
     ($name: ident, $transform: ident, $next_in_place: ident, $last_in_place: ident, $buf_size_calc: expr) => {
@@ -19,7 +15,7 @@ macro_rules! sync_crypt_reader_impl {
         }
 
         impl<R> $name<R> where R: Read {
-            pub fn new(reader: R, key: &Key<Cipher>, nonce: &stream::Nonce<Cipher, Stream>) -> Self {
+            pub fn new(reader: R, (key, nonce): &Handle) -> Self {
                 let reader = BufReader::new(reader);
                 let transform = $transform::<Cipher, Stream>::new(key, nonce);
                 let buffer = Vec::new();
@@ -59,26 +55,19 @@ macro_rules! sync_crypt_reader_impl {
 sync_crypt_reader_impl!(EncryptingReader, Encryptor, encrypt_next_in_place, encrypt_last_in_place, BUF_SIZE);
 sync_crypt_reader_impl!(DecryptingReader, Decryptor, decrypt_next_in_place, decrypt_last_in_place, BUF_SIZE + StreamTagLength::to_usize());
 
-pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<(Key<Cipher>, stream::Nonce<Cipher, Stream>), GaiaError> {
-    let key = Cipher::generate_key(&mut OsRng);
-
-    let mut stream_nonce = GenericArray::<u8, StreamNonceLength>::default();
-    (&mut OsRng).fill_bytes(&mut stream_nonce);
-
-    let mut reader = EncryptingReader::new(Box::new(input), &key, &stream_nonce.into());
+pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<Handle, GaiaError> {
+    let handle = generate_handle(&mut OsRng);
+    let mut reader = EncryptingReader::new(Box::new(input), &handle);
     io::copy(&mut reader, &mut output).map_err(|e| GaiaError::WritingOutput(e))?;
-    Ok((key, stream_nonce))
+    Ok(handle)
 }
 
-pub fn decrypt(input: impl Read, kh: &(Key<Cipher>, stream::Nonce<Cipher, Stream>), mut output: impl Write) -> Result<(), GaiaError>
+pub fn decrypt(input: impl Read, handle: &Handle, mut output: impl Write) -> Result<(), GaiaError>
     where
         <Cipher as AeadCore>::NonceSize: Sub<U4>,
         <<Cipher as AeadCore>::NonceSize as Sub<U4>>::Output: ArrayLength<u8>
 {
-    let stream_nonce = kh.1;
-
-    let mut reader = DecryptingReader::new(Box::new(input), &kh.0, &stream_nonce.into());
+    let mut reader = DecryptingReader::new(Box::new(input), handle);
     io::copy(&mut reader, &mut output).map_err(|e| GaiaError::WritingOutput(e))?;
-
     Ok(())
 }

@@ -2,33 +2,26 @@ use std::io::{self, ErrorKind};
 use std::ops::Sub;
 use std::pin::Pin;
 use std::task::{Context, Poll, ready};
-use aead::{AeadCore, OsRng, stream, consts::U4, generic_array::{ArrayLength, GenericArray}, rand_core::RngCore};
-use crypto_common::{KeyInit, typenum::Unsigned};
+use aead::{AeadCore, OsRng, consts::U4, generic_array::ArrayLength};
+use crypto_common::typenum::Unsigned;
 use tokio::io::{AsyncRead, ReadBuf};
 
-use crate::{error::GaiaError, BUF_SIZE, Stream, Key, Cipher, Encryptor, Decryptor, StreamTagLength, StreamNonceLength};
+use crate::{error::GaiaError, BUF_SIZE, Stream, Cipher, Encryptor, Decryptor, StreamTagLength, Handle, generate_handle};
 
-pub async fn encrypt_async(input: impl AsyncRead + Unpin, mut output: impl tokio::io::AsyncWrite + Unpin) -> Result<(Key<Cipher>, stream::Nonce<Cipher, Stream>), GaiaError> {
-    let key = Cipher::generate_key(&mut OsRng);
-
-    let mut stream_nonce = GenericArray::<u8, StreamNonceLength>::default();
-    (&mut OsRng).fill_bytes(&mut stream_nonce);
-
-    let mut reader = AsyncEncryptingReader::new(Box::new(input), &key, &stream_nonce.into());
+pub async fn encrypt_async(input: impl AsyncRead + Unpin, mut output: impl tokio::io::AsyncWrite + Unpin) -> Result<Handle, GaiaError> {
+    let handle = generate_handle(&mut OsRng);
+    let mut reader = AsyncEncryptingReader::new(Box::new(input), &handle);
     tokio::io::copy(&mut reader, &mut output).await.map_err(|e| GaiaError::WritingOutput(e))?;
-
-    Ok((key, stream_nonce))
+    Ok(handle)
 }
 
-pub async fn decrypt_async(input: impl AsyncRead + Unpin, kh: &(Key<Cipher>, stream::Nonce<Cipher, Stream>), mut output: impl tokio::io::AsyncWrite + Unpin) -> Result<(), GaiaError>
+pub async fn decrypt_async(input: impl AsyncRead + Unpin, handle: &Handle, mut output: impl tokio::io::AsyncWrite + Unpin) -> Result<(), GaiaError>
     where
         <Cipher as AeadCore>::NonceSize: Sub<U4>,
         <<Cipher as AeadCore>::NonceSize as Sub<U4>>::Output: ArrayLength<u8>
 {
-    let stream_nonce = kh.1;
-    let mut reader = AsyncDecryptingReader::new(Box::new(input), &kh.0, &stream_nonce.into());
+    let mut reader = AsyncDecryptingReader::new(Box::new(input), handle);
     tokio::io::copy(&mut reader, &mut output).await.map_err(|e| GaiaError::WritingOutput(e))?;
-
     Ok(())
 }
 
@@ -113,7 +106,7 @@ macro_rules! async_crypt_reader_impl {
         }
 
         impl<R> $name<R> where R: AsyncRead + Unpin {
-            pub fn new(reader: R, key: &Key<Cipher>, nonce: &stream::Nonce<Cipher, Stream>) -> Self {
+            pub fn new(reader: R, (key, nonce): &Handle) -> Self {
                 let transform = $transform::<Cipher, Stream>::new(key, nonce);
 
                 Self { chunk_reader: Box::new(AsyncChunkingReader::new(reader)), transform: Some(transform),
