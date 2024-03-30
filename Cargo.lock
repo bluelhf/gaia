@@ -245,6 +245,7 @@ dependencies = [
  "aes-gcm-siv",
  "base64",
  "crypto-common",
+ "rand_core",
  "tokio",
 ]
 
