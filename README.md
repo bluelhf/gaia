@@ -7,7 +7,7 @@ Gaia is a command-line application and library for encrypting and decrypting fil
 <img src="assets/shell.png" width="400" align="left">
 <br clear="both"/>
 
-## Compiling
+## Compiling the CLI
 
 1. [Install Rust](https://rustup.rs/)
 2. ```shell
@@ -16,25 +16,16 @@ Gaia is a command-line application and library for encrypting and decrypting fil
    ```
 3. The compiled binary is at `target/release/gaia`.
 
-## Usage as a Library
+## Usage as a library
+See the command-line interface code in this repository for an example on how to depend on and use the library :)
 
-> **Note**
-> See the command-line interface code in this repository for an example on how to depend on and use the library :)
+## Implementation
 
-Gaia has a tiny library, located in the `gaia` directory. At its core are two functions:
-
-1. `encrypt(impl Read, impl Write) -> Result<(Key, Nonce), ...>`
-2. `decrypt(impl Read, (Key, Nonce), impl Write) -> Result<(), ...>`
-
-and their asynchronous counterparts (with the `tokio` feature)
-1. `encrypt_async(input: impl AsyncRead + Unpin,               impl AsyncWrite + Unpin) -> Result<(Key, Nonce), ...>`
-2. `decrypt_async(input: impl AsyncRead + Unpin, (Key, Nonce), impl AsyncWrite + Unpin) -> Result<()          , ...>`
-
-Finally, for all four functions there are `struct` counterparts implementing `Read` and `tokio::io::AsyncRead` respectively.
+Gaia encrypts data with a STREAM-LE31 AES-256-GCM-SIV construction.
 
 These use the STREAM-LE31 construction with AES-256-GCM-SIV, as implemented in [aead::stream](https://docs.rs/aead/latest/aead/stream/index.html).
 
-`(Key, Nonce)` pairs can be converted to and from URL-safe BASE64 strings when the `base64` library is enabled by using another pair of methods:
+Handles can be converted to and from URL-safe BASE64 strings when the `base64` library is enabled by using another pair of methods:
 
 1. `gaia::keystore::to_secret((Key, Nonce)) -> Result<String, ...>`
 2. `gaia::keystore::from_secret(&str) -> Result<(Key, Nonce), ...>`
