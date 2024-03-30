@@ -55,6 +55,13 @@ macro_rules! sync_crypt_reader_impl {
 sync_crypt_reader_impl!(EncryptingReader, Encryptor, encrypt_next_in_place, encrypt_last_in_place, BUF_SIZE);
 sync_crypt_reader_impl!(DecryptingReader, Decryptor, decrypt_next_in_place, decrypt_last_in_place, BUF_SIZE + StreamTagLength::to_usize());
 
+impl<R> EncryptingReader<R> where R: Read {
+    pub fn new_with_os_rng(reader: R) -> (Self, Handle) {
+        let handle = generate_handle(&mut OsRng);
+        (Self::new(reader, &handle), handle)
+    }
+}
+
 pub fn encrypt(input: impl Read, mut output: impl Write) -> Result<Handle, GaiaError> {
     let handle = generate_handle(&mut OsRng);
     let mut reader = EncryptingReader::new(Box::new(input), &handle);

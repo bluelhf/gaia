@@ -2,11 +2,11 @@ use std::io::{self, ErrorKind};
 use std::ops::Sub;
 use std::pin::Pin;
 use std::task::{Context, Poll, ready};
-use aead::{AeadCore, OsRng, consts::U4, generic_array::ArrayLength};
+use aead::{AeadCore, consts::U4, generic_array::ArrayLength, OsRng};
 use crypto_common::typenum::Unsigned;
 use tokio::io::{AsyncRead, ReadBuf};
 
-use crate::{error::GaiaError, BUF_SIZE, Stream, Cipher, Encryptor, Decryptor, StreamTagLength, Handle, generate_handle};
+use crate::{BUF_SIZE, Cipher, Decryptor, Encryptor, error::GaiaError, generate_handle, Handle, Stream, StreamTagLength};
 
 pub async fn encrypt_async(input: impl AsyncRead + Unpin, mut output: impl tokio::io::AsyncWrite + Unpin) -> Result<Handle, GaiaError> {
     let handle = generate_handle(&mut OsRng);
@@ -169,3 +169,10 @@ macro_rules! async_crypt_reader_impl {
 
 async_crypt_reader_impl!(AsyncEncryptingReader, Encryptor, encrypt_next_in_place, encrypt_last_in_place, BUF_SIZE);
 async_crypt_reader_impl!(AsyncDecryptingReader, Decryptor, decrypt_next_in_place, decrypt_last_in_place, BUF_SIZE + StreamTagLength::to_usize());
+
+impl<R> AsyncEncryptingReader<R> where R: AsyncRead + Unpin {
+    pub fn new_with_os_rng(reader: R) -> (Self, Handle) {
+        let handle = generate_handle(&mut OsRng);
+        (Self::new(reader, &handle), handle)
+    }
+}
